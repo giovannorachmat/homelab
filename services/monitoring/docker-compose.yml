@@ -1,10 +1,4 @@
 networks:
-  airflow:
-    driver: bridge
-    external: true
-  monitoring:
-    driver: bridge
-    external: true
   private-net:
     external: true
 
