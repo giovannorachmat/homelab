@@ -1,0 +1,12 @@
+# Ignore everything in runtime/ (secrets, data, certs)
+runtime/**
+
+# Except .env.example templates (needed for GitHub)
+!**/.env.example
+
+# Docker
+.docker/
+
+# OS
+.DS_Store
+Thumbs.db

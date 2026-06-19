@@ -1,0 +1,30 @@
+services:
+  floci:
+    container_name: floci
+    image: floci/floci:latest
+    restart: unless-stopped
+
+    env_file:
+      - ../../runtime/floci/.env
+
+    ports:
+      - "4566:4566"
+
+    volumes:
+      - ../../runtime/floci/data:/app/data
+
+    networks:
+      - private-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+
+networks:
+  private-net:
+    external: true

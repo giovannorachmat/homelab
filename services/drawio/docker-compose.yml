@@ -1,0 +1,36 @@
+services:
+  drawio:
+    container_name: drawio
+    image: jgraph/drawio
+    restart: unless-stopped
+
+    environment:
+      PUBLIC_DNS: drawio.giografi.my.id
+      ORGANISATION_UNIT: homelab
+      ORGANISATION: giografi
+      CITY: Jakarta
+      STATE: Jakarta
+      COUNTRY_CODE: ID
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080 || exit 1"]
+      interval: 1m30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+    networks:
+      - private-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+
+networks:
+  private-net:
+    external: true

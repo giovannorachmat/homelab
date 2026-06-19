@@ -1,0 +1,33 @@
+services:
+  app:
+    container_name: npm
+    image: "jc21/nginx-proxy-manager:2.15.1"
+    restart: unless-stopped
+
+    environment:
+      TZ: "Asia/Jakarta"
+
+    ports:
+      - "80:80/tcp" # Public HTTP Port
+      - "443:443/tcp" # Public HTTPS Port
+      - "81:81/tcp" # Admin Web Port
+
+    volumes:
+      - ../../runtime/npm/data:/data
+      - ../../runtime/npm/letsencrypt:/etc/letsencrypt
+
+    networks:
+      - private-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 250M
+        reservations:
+          cpus: "0.5"
+          memory: 250M
+
+networks:
+  private-net:
+    external: true

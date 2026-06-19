@@ -1,0 +1,30 @@
+services:
+  ollama:
+    container_name: ollama
+    image: ollama/ollama:latest
+    restart: unless-stopped
+
+    env_file:
+      - ../../runtime/ollama/.env
+
+    ports:
+      - 11434:11434
+
+    volumes:
+      - ../../../.ollama/:/root/.ollama:rw
+
+    networks:
+      - private-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+
+networks:
+  private-net:
+    external: true

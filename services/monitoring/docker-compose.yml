@@ -1,0 +1,157 @@
+networks:
+  airflow:
+    driver: bridge
+    external: true
+  monitoring:
+    driver: bridge
+    external: true
+  private-net:
+    external: true
+
+services:
+  node-exporter:
+    container_name: node-exporter-c
+    image: prom/node-exporter:latest
+    restart: unless-stopped
+
+    ports:
+      - "9100:9100"
+
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+
+    networks:
+      - private-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+
+  prometheus:
+    container_name: prometheus-c
+    image: prom/prometheus:v2.49.0
+    restart: unless-stopped
+
+    ports:
+      - "9090:9090"
+
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-storage:/prometheus
+
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+
+    networks:
+      - private-net
+
+    depends_on:
+      - node-exporter
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 512M
+
+  loki:
+    container_name: loki-c
+    image: grafana/loki:3.6.3
+    restart: unless-stopped
+
+    ports:
+      - "3100:3100"
+
+    command: -config.file=/etc/loki/local-config.yaml
+
+    networks:
+      - private-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+
+  promtail:
+    container_name: promtail-c
+    image: grafana/promtail:3.2.1
+    restart: unless-stopped
+
+    ports:
+      - "9091:9091"
+
+    volumes:
+      - /var/log:/var/log
+      - ./config/promtail.yml:/etc/promtail/config.yml
+      - /home/giografi/runtime/airflow-docker/logs:/var/log/airflow:ro
+      - /home/giografi/runtime/vault/logs:/var/log/vault:ro
+
+    command: -config.file=/etc/promtail/config.yml
+
+    networks:
+      - private-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+
+  grafana:
+    container_name: grafana-c
+    image: grafana/grafana:latest
+    restart: unless-stopped
+
+    ports:
+      - "3000:3000"
+
+    environment:
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_FEATURE_TOGGLES_ENABLE: alertingSimplifiedRouting,alertingQueryAndExpressionsStepMode
+
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      - ./config/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+      - ./config/grafana/dashboard.yml:/etc/grafana/provisioning/dashboards/dashboard.yml
+      - ./config/grafana/linux-monitoring.json:/var/lib/grafana/dashboards/linux-monitoring.json
+
+    networks:
+      - private-net
+
+    depends_on:
+      - prometheus
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+
+volumes:
+  grafana-storage:
+  prometheus-storage:

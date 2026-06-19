@@ -1,0 +1,35 @@
+services:
+  open-webui:
+    container_name: open-webui
+    image: ghcr.io/open-webui/open-webui:main-slim
+    restart: unless-stopped
+
+    env_file:
+      - ../../runtime/open-webui/.env
+
+    environment:
+      TZ: "Asia/Jakarta"
+      RAG_SYSTEM_CONTEXT: true
+      UVICORN_ACCESS_LOG: false
+      ENABLE_RAG_HYBRID_SEARCH: true
+      ENABLE_OLLAMA_API: true
+      OLLAMA_BASE_URL: http://ollama:11434
+
+    volumes:
+      - ../../runtime/open-webui/data:/app/backend/data
+
+    networks:
+      - private-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+networks:
+  private-net:
+    external: true
