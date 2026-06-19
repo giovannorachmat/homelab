@@ -1,6 +1,6 @@
-# I built this homelab to learn DevOps/SRE
+# Homelab
 
-This is a personal homelab running on a mini PC at home. I use it to learn Docker, networking, reverse proxies, monitoring, and everything else a good SRE should know. Everything runs on a single machine behind a Cloudflare DNS, accessible from anywhere via subdomains on `giografi.my.id`.
+This is a personal homelab running on a mini PC at home. I use it to learn Docker, networking, reverse proxies, monitoring, and everything else a good DevOps engineer should know (though at the time of this writing, I'm not a DevOps engineer). Everything runs on a single machine behind a Cloudflare DNS, accessible from anywhere via subdomains on `giografi.my.id`.
 
 **Current status:**
 - 5 services running (AdGuardHome, NPM, Ollama, Open WebUI, Traefik)
@@ -9,7 +9,20 @@ This is a personal homelab running on a mini PC at home. I use it to learn Docke
 
 ---
 
-## 1. Hardware
+## Table of Contents
+
+- [Hardware](#hardware)
+- [Services](#services)
+- [Directory Layout](#directory-layout)
+- [Quick Start](#quick-start)
+- [Architecture & Design Decisions](#architecture--design-decisions)
+- [Operations](#operations)
+- [Reference](#reference)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## Hardware
 
 | Spec | Value |
 |------|-------|
@@ -20,13 +33,31 @@ This is a personal homelab running on a mini PC at home. I use it to learn Docke
 | **OS** | Ubuntu 24.04.4 LTS (Noble Numbat) |
 | **Hostname** | `lenovo-m715q` |
 
-**Why this matters:** This is not a beefy server. Every service has strict resource limits. If you add something heavy, you will run out of memory or disk. Check `docker stats` and `df -h` regularly.
+This is not a beefy server. Every service has strict resource limits. If you add something heavy, you will run out of memory or disk. Check `docker stats` and `df -h` regularly.
 
-**Disk usage warning:** As of writing, root filesystem is at 81% (88GB / 115GB used, 22GB free). Be careful with log files, model downloads, and Docker images.
+**Disk usage:** Root filesystem at 81% (88GB / 115GB used, 22GB free). Be careful with log files, model downloads, and Docker images.
 
 ---
 
-## 2. Directory Layout
+## Services
+
+| Service | Image | Host Ports | CPU / RAM Limits | Purpose | Status |
+|---------|-------|-----------|------------------|---------|--------|
+| **AdGuardHome** | `adguard/adguardhome:latest` | 53 (DNS) | 0.5 / 250M | DNS ad-blocker | Running |
+| **NPM** | `jc21/nginx-proxy-manager:2.15.1` | 80, 81, 443 | 0.5 / 250M | Reverse proxy + SSL | Running |
+| **Ollama** | `ollama/ollama:latest` | 11434 | 0.5 / 256M | LLM inference (cloud proxy) | Running |
+| **Open WebUI** | `ghcr.io/open-webui/open-webui:main-slim` | (internal only) | 1 / 1G | Chat interface for LLMs | Running |
+| **Traefik** | `traefik:latest` | 8080, 8443 | 0.25 / 128M | Reverse proxy (learning) | Running |
+| **n8n** | `docker.n8n.io/n8nio/n8n` | 5678 | 1 / 1G | Workflow automation | Not started |
+| **Drawio** | `jgraph/drawio` | (none) | 0.5 / 256M | Diagramming tool | Not started |
+| **Floci** | `floci/floci:latest` | 4566 | 0.5 / 256M | Local AWS emulator | Not started |
+| **Monitoring** | Multiple | 3000, 9090, 9091, 9100, 3100 | ~2.5G total | Grafana + Prometheus + Loki | Not started |
+
+**Total resources if everything runs:** ~6.5 GB RAM, ~5.5 CPU cores. On a 16GB / 8-thread machine, this leaves headroom for the OS and bursts.
+
+---
+
+## Directory Layout
 
 ```
 /home/giografi/homelab/
@@ -61,7 +92,7 @@ This is a personal homelab running on a mini PC at home. I use it to learn Docke
     │   └── .env               # AWS credentials (test)
     ├── monitoring/
     │   ├── config/
-    │   └── .env               # (unused — values hardcoded in compose)
+    │   └── .env
     ├── n8n/
     │   └── data/
     ├── npm/
@@ -74,65 +105,38 @@ This is a personal homelab running on a mini PC at home. I use it to learn Docke
         └── .env               # API keys for AI providers
 ```
 
-**Why two folders?**
-
-- `services/` = code. I can edit, version control, and share these. The compose files define *what* to run.
-- `runtime/` = state. This is where containers store their data. I back this up. If I delete a compose file and re-create it, the container picks up where it left off because the data is still here.
-
-**Why bind mounts instead of Docker volumes?**
-
-Docker volumes are opaque — you need `docker volume inspect` to find where data lives. Bind mounts put everything in a predictable path I can `ls`, `cat`, and `tar`. For a homelab, this is easier to manage and back up.
+**Why two folders?** `services/` = code (version controlled, shared). `runtime/` = state (backed up, picked up on re-create). See [Architecture & Design Decisions](#why-bind-mounts-instead-of-docker-volumes) for why bind mounts instead of Docker volumes.
 
 ---
 
-## 3. Prerequisites
+## Quick Start
 
-Before you start, you need:
+### Prerequisites
 
 1. **Docker + Docker Compose**
    ```bash
-   # Install Docker
    curl -fsSL https://get.docker.com | sh
-   
-   # Add your user to the docker group (log out and back in after)
-   sudo usermod -aG docker $USER
+   sudo usermod -aG docker $USER   # log out and back in after
    ```
 
 2. **A domain name** — I use `giografi.my.id`. Point an A record to your server's public IP.
 
-3. **Cloudflare (or similar DNS provider)** — for DNS management and SSL. If you use Cloudflare, set SSL mode to "Full (Strict)" and enable proxy (orange cloud) for your subdomains.
+3. **Cloudflare (or similar DNS)** — set SSL mode to "Full (Strict)" and enable proxy (orange cloud) for subdomains.
 
-4. **Basic terminal knowledge** — you should be comfortable with `cd`, `ls`, `cat`, `nano`/`vim`, and running commands in a terminal.
+4. **Basic terminal comfort** — you should be comfortable with `cd`, `ls`, `cat`, `nano`/`vim`.
 
----
-
-## 4. Quick Start
-
-Here's how I get everything running from scratch:
-
-### Step 1: Create the directory structure
+### Steps
 
 ```bash
-mkdir -p /home/giografi/homelab
-cd /home/giografi/homelab
-mkdir -p services runtime
-```
+# 1. Create directories
+mkdir -p /home/giografi/homelab/{services,runtime}
 
-### Step 2: Create the Docker network
-
-All services share a single network called `private-net`. Create it once:
-
-```bash
+# 2. Create the shared Docker network
 docker network create private-net
-```
 
-### Step 3: Create .env files
+# 3. Create .env files
+mkdir -p runtime/open-webui runtime/ollama
 
-Each service that needs secrets has a `.env` file. Create them with placeholder values:
-
-```bash
-# Open WebUI
-mkdir -p runtime/open-webui
 cat > runtime/open-webui/.env << 'EOF'
 OPENAI_API_KEY=your-openai-key-here
 OPENROUTER_API_KEY=your-openrouter-key-here
@@ -141,38 +145,25 @@ ANTHROPIC_API_KEY=your-anthropic-key-here
 DEEPSEEK_API_KEY=your-deepseek-key-here
 EOF
 
-# Ollama
-mkdir -p runtime/ollama
 cat > runtime/ollama/.env << 'EOF'
 OLLAMA_API_KEY=your-ollama-cloud-key-here
 EOF
-```
 
-### Step 4: Start core services
-
-```bash
-# Start these in order (NPM first because it binds port 80/443)
+# 4. Start core services (NPM first — it binds port 80/443)
 docker compose -f services/npm/docker-compose.yml up -d
 docker compose -f services/adguardhome/docker-compose.yml up -d
 docker compose -f services/ollama/docker-compose.yml up -d
 docker compose -f services/open-webui/docker-compose.yml up -d
-```
 
-### Step 5: Verify everything is running
-
-```bash
+# 5. Verify
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 ```
 
-You should see:
-- `adguardhome` — Up, port 53 exposed
-- `npm` — Up, ports 80/81/443 exposed
-- `ollama` — Up, port 11434 exposed
-- `open-webui` — Up (health: starting → healthy after ~30s)
+You should see `adguardhome`, `npm`, `ollama`, and `open-webui` (health: starting → healthy after ~30s).
 
-### Step 6: Configure DNS
+### DNS Setup
 
-In Cloudflare (or your DNS provider), create A records:
+In Cloudflare, create A records:
 
 | Type | Name | Content | Proxy |
 |------|------|---------|-------|
@@ -181,15 +172,11 @@ In Cloudflare (or your DNS provider), create A records:
 | A | `npm` | `YOUR.SERVER.IP` | Yes |
 | A | `ai` | `YOUR.SERVER.IP` | Yes |
 
-### Step 7: Set up NPM proxy hosts
+### NPM Proxy Hosts
 
-1. Open `http://YOUR.SERVER.IP:81` in your browser
-2. Login with default credentials:
-   - Email: `admin@example.com`
-   - Password: `changeme`
-   - **Change these immediately!**
-3. Go to **Proxy Hosts** → **Add Proxy Host**
-4. For each service, create a proxy host:
+1. Open `http://YOUR.SERVER.IP:81` → login with `admin@example.com` / `changeme` → **change immediately**
+2. Go to **Proxy Hosts** → **Add Proxy Host**
+3. For each service:
 
 | Domain | Forward Host | Forward Port | WebSocket |
 |--------|-------------|-------------|-----------|
@@ -197,51 +184,33 @@ In Cloudflare (or your DNS provider), create A records:
 | `npm.giografi.my.id` | `npm` | `81` | No |
 | `ai.giografi.my.id` | `open-webui` | `8080` | **Yes** |
 
-5. Enable **SSL** tab → Let's Encrypt → Request new certificate
-6. Enable **Force SSL**
+4. Enable **SSL** → Let's Encrypt → Request new certificate → **Force SSL**
 
-### Step 8: Verify access
+### Verify
 
 - `https://adguard.giografi.my.id` → AdGuardHome admin
 - `https://npm.giografi.my.id` → NPM admin
 - `https://ai.giografi.my.id` → Open WebUI chat
 
-### Step 9: Update .env.example files (for GitHub)
+### Sync .env templates for Git
 
-After editing any `.env` file, regenerate the templates so they stay in sync:
+After editing any `.env` file, regenerate the templates:
 
 ```bash
-cd /home/giografi/homelab
 ./scripts/generate-env-examples.sh
 ```
 
-This reads every `runtime/**/.env` and writes a corresponding `.env.example` with placeholder values. Only `.env.example` files are committed to git — real `.env` files are ignored.
+Only `.env.example` files are committed — real `.env` files are ignored by `.gitignore`.
 
 ---
 
-## 5. Services Reference
+## Architecture & Design Decisions
 
-| Service | Image | Host Ports | CPU / RAM Limits | Purpose | Status |
-|---------|-------|-----------|------------------|---------|--------|
-| **AdGuardHome** | `adguard/adguardhome:latest` | 53 (DNS) | 0.5 / 250M | DNS ad-blocker | Running |
-| **NPM** | `jc21/nginx-proxy-manager:2.15.1` | 80, 81, 443 | 0.5 / 250M | Reverse proxy + SSL | Running |
-| **Ollama** | `ollama/ollama:latest` | 11434 | 0.5 / 256M | LLM inference (cloud proxy) | Running |
-| **Open WebUI** | `ghcr.io/open-webui/open-webui:main-slim` | (internal only) | 1 / 1G | Chat interface for LLMs | Running |
-| **Traefik** | `traefik:latest` | 8080, 8443 | 0.25 / 128M | Reverse proxy (learning) | Running |
-| **n8n** | `docker.n8n.io/n8nio/n8n` | 5678 | 1 / 1G | Workflow automation | Not started |
-| **Drawio** | `jgraph/drawio` | (none) | 0.5 / 256M | Diagramming tool | Not started |
-| **Floci** | `floci/floci:latest` | 4566 | 0.5 / 256M | Local AWS emulator | Not started |
-| **Monitoring** | Multiple | 3000, 9090, 9091, 9100, 3100 | ~2.5G total | Grafana + Prometheus + Loki | Not started |
+### Networking
 
-**Total resources if everything runs:** ~6.5 GB RAM, ~5.5 CPU cores. On a 16GB / 8-thread machine, this leaves headroom for the OS and bursts.
+#### The private-net
 
----
-
-## 6. Networking
-
-### The private-net
-
-All containers connect to a single Docker bridge network called `private-net`. This lets them talk to each other by container name (e.g., Open WebUI connects to Ollama via `http://ollama:11434`).
+All containers share a single Docker bridge network called `private-net`. This lets them talk to each other by container name (e.g., Open WebUI connects to Ollama via `http://ollama:11434`).
 
 ```
                     ┌─────────────────────────────────────┐
@@ -255,132 +224,138 @@ All containers connect to a single Docker bridge network called `private-net`. T
                     └─────────────────────────────────────┘
 ```
 
-### Port mapping explained
+#### Port mapping
 
-When you see `ports: "8080:80"` in a compose file, it means:
+When you see `ports: "8080:80"` in a compose file:
 
 ```
 host_port : container_port
 ```
 
-- `8080` = the port on the host machine (what you access from outside)
-- `80` = the port inside the container (what the app listens on)
+- `8080` = port on the host machine (what you access from outside)
+- `80` = port inside the container (what the app listens on)
 
-**Common mistake:** Don't confuse host port with container port. When NPM forwards to a service, it uses the **container port**, not the host port.
+**Common mistake:** NPM forwards to the **container port**, not the host port.
 
-### Why AdGuardHome admin port is commented out
-
-I commented out `8080:80` in the AdGuardHome compose file. This means you **cannot** access the admin panel directly via `http://YOUR.IP:8080`. You must go through NPM at `https://adguard.giografi.my.id`.
-
-This is intentional — I want all admin access to go through HTTPS with authentication.
-
-### Why drawio has no host ports
-
-Drawio's container listens on port 8080 internally, same as AdGuardHome's commented-out port. If I exposed both, they'd conflict. I access drawio only through NPM at `https://drawio.giografi.my.id`.
-
-### NPM reverse proxy flow
+#### NPM reverse proxy flow
 
 When you visit `https://ai.giografi.my.id`:
 
-```
-1. Browser sends HTTPS request to YOUR.SERVER.IP:443
+1. Browser sends HTTPS request to `YOUR.SERVER.IP:443`
 2. NPM receives it on port 443
-3. NPM matches the domain "ai.giografi.my.id" to a proxy host
-4. NPM forwards the request to "open-webui:8080" (container name + container port)
+3. NPM matches domain `ai.giografi.my.id` to a proxy host
+4. NPM forwards to `open-webui:8080` (container name + container port)
 5. Open WebUI responds
 6. NPM sends the response back to your browser
+
+#### Why AdGuardHome admin port is commented out
+
+I commented out `8080:80` in the AdGuardHome compose file. This means you **cannot** access the admin panel directly via `http://YOUR.IP:8080` — you must go through NPM at `https://adguard.giografi.my.id`. This ensures all admin access goes through HTTPS with authentication.
+
+#### Why drawio has no host ports
+
+Drawio's container listens on port 8080 internally, same as AdGuardHome's commented-out port. If I exposed both, they'd conflict. I access drawio only through NPM at `https://drawio.giografi.my.id`.
+
+#### Traefik vs NPM
+
+I run both reverse proxies. NPM on standard ports (80/443) for production. Traefik on alt ports (8080/8443) for learning. Check port availability before starting a new proxy:
+
+```bash
+ss -tlnp | grep -E ':(80|443|8080|8443) '
 ```
+
+### Why a single Docker network?
+
+I'm a beginner. A single `private-net` is simpler to manage, debug, and reason about. I can split it later (e.g., `monitoring-net`, `ai-net`, `proxy-net`) when I outgrow it. For now, `docker network inspect private-net` shows everything in one place.
+
+### Why NPM instead of just Traefik?
+
+NPM has a web UI for managing proxy hosts — I can add domains, SSL certs, and advanced configs without editing YAML. Traefik auto-discovers containers, but I want to learn the manual way first.
+
+### Why bind mounts instead of Docker volumes?
+
+Docker volumes are opaque — you need `docker volume inspect` to find where data lives. Bind mounts put everything in a predictable path I can `ls`, `cat`, and `tar`. Easier to manage and back up for a homelab.
+
+### Why cloud-only Ollama?
+
+I don't have a GPU. Running LLMs locally on CPU would be painfully slow. Ollama supports cloud models (like `gemma4:31b-cloud`) that run on Ollama's servers but use the same API. I get the Ollama experience without the hardware.
+
+### Why AdGuardHome uses two ports (3000 and 80)?
+
+Port 3000 is for the first-launch setup wizard only. After setup completes, it switches to port 80. The container maps both — `3000:3000` during setup, and (commented out) `8080:80` after setup. Complete the wizard first, then access via NPM.
+
+### Open WebUI provider fallback
+
+Open WebUI supports multiple AI providers via `OPENAI_API_BASE_URLS` and `OPENAI_API_KEYS` (semicolon-separated lists). It also supports single-provider fallback via `OPENAI_API_BASE_URL` and `OPENAI_API_KEY`. I have both configured because the multi-provider vars had DB corruption issues — the single-provider vars work as a fallback.
 
 ---
 
-## 7. Operations Cheat Sheet
+## Operations
 
 ### Start everything
 
 ```bash
-cd /home/giografi/homelab
-
-# Start core services
+# Core services
 docker compose -f services/npm/docker-compose.yml up -d
 docker compose -f services/adguardhome/docker-compose.yml up -d
 docker compose -f services/ollama/docker-compose.yml up -d
 docker compose -f services/open-webui/docker-compose.yml up -d
 
-# Optional: start Traefik (learning)
+# Optional: Traefik (learning)
 docker compose -f services/traefik/docker-compose.yml up -d
-```
 
-### Start optional services
-
-```bash
+# Optional services
 docker compose -f services/n8n/docker-compose.yml up -d
 docker compose -f services/drawio/docker-compose.yml up -d
 docker compose -f services/floci/docker-compose.yml up -d
 docker compose -f services/monitoring/docker-compose.yml up -d
 ```
 
-### Stop a specific service
+### Stop / restart
 
 ```bash
+# Stop
 docker compose -f services/<service>/docker-compose.yml down
-```
 
-### Restart a specific service
+# Restart
+docker compose -f services/<service>/docker-compose.yml restart
 
-```bash
+# Full restart (down + up)
 docker compose -f services/<service>/docker-compose.yml down && \
 docker compose -f services/<service>/docker-compose.yml up -d
 ```
 
-### View logs (follow mode)
+### View logs
 
 ```bash
+# Follow mode
 docker logs -f <container_name>
-```
 
-### View last 100 lines of logs
-
-```bash
+# Last 100 lines
 docker logs --tail 100 <container_name>
+
+# Compose-specific
+docker compose -f services/<service>/docker-compose.yml logs -f
 ```
 
-### Check container health
+### Health checks
 
 ```bash
 docker ps --format "table {{.Names}}\t{{.Status}}"
-```
-
-### Enter a container shell
-
-```bash
-docker exec -it <container_name> sh
-```
-
-### Check resource usage
-
-```bash
 docker stats --no-stream
 ```
 
-### Check disk usage
+### Disk usage
 
 ```bash
 df -h
-```
-
-### Check what's using disk
-
-```bash
 du -sh /home/giografi/homelab/runtime/*
 ```
 
-### Update an image
+### Update images
 
 ```bash
-# Pull the latest image
 docker pull <image_name>
-
-# Recreate the container
 docker compose -f services/<service>/docker-compose.yml down
 docker compose -f services/<service>/docker-compose.yml up -d
 ```
@@ -391,59 +366,54 @@ docker compose -f services/<service>/docker-compose.yml up -d
 docker image prune -a
 ```
 
-### Regenerate .env.example files (for GitHub)
-
-After editing any `.env` file, run this to update the templates:
+### Shell into a container
 
 ```bash
-cd /home/giografi/homelab
-./scripts/generate-env-examples.sh
+docker exec -it <container_name> sh
 ```
 
-This keeps `.env.example` files in sync with your real `.env` files. Only `.env.example` goes to git — real `.env` files are ignored by `.gitignore`.
+### Adding a new service
 
----
+1. Copy the [compose template](#compose-template) and fill in the blanks
+2. Create the runtime directory: `mkdir -p runtime/<service>`
+3. Create `.env` if needed, then run `./scripts/generate-env-examples.sh`
+4. Start: `docker compose -f services/<service>/docker-compose.yml up -d`
+5. Add NPM proxy host + SSL + Cloudflare DNS A record
 
-## 8. Adding a New Service
+### Adding a new subdomain
 
-When I add a new service, I follow this process:
+1. Add DNS A record in Cloudflare: `<subdomain>` → `YOUR.SERVER.IP`
+2. Start the service (see above)
+3. In NPM admin: add Proxy Host → `<subdomain>.giografi.my.id` → `<container_name>:<port>`
+4. Enable SSL + Force SSL
 
-### Step 1: Create the compose file
+### Adding an AI provider to Open WebUI
 
-Copy the template from [Section 14](#compose-template) and fill in the blanks.
-
-### Step 2: Create the runtime directory
+Add the provider's base URL and API key to `runtime/open-webui/.env`, then append to the semicolon-separated lists:
 
 ```bash
-mkdir -p /home/giografi/homelab/runtime/<service>
+NEW_PROVIDER_BASEURL=https://api.newprovider.com/v1
+NEW_PROVIDER_APIKEY=sk-your-key-here
+
+OPENAI_API_BASE_URLS=$OPENAI_BASEURL;$OPENROUTER_BASEURL;$ANTHROPIC_BASEURL;$HF_BASEURL;$DEEPSEEK_BASEURL;$NEW_PROVIDER_BASEURL
+OPENAI_API_KEYS=$OPENAI_APIKEY;$OPENROUTER_APIKEY;$ANTHROPIC_APIKEY;$HF_TOKEN;$DEEPSEEK_APIKEY;$NEW_PROVIDER_APIKEY
 ```
 
-### Step 3: Create .env (if needed)
+Restart: `docker compose -f services/open-webui/docker-compose.yml restart`
 
-```bash
-cat > /home/giografi/homelab/runtime/<service>/.env << 'EOF'
-SECRET_KEY=your-secret-here
-EOF
-```
+### Environment files
 
-Then regenerate the template for GitHub:
+| File | Service | Keys |
+|------|---------|------|
+| `runtime/open-webui/.env` | Open WebUI | `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `HF_TOKEN`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `WEBUI_SECRET_KEY`, `WEBUI_ADMIN_EMAIL`, `WEBUI_ADMIN_PASSWORD` |
+| `runtime/ollama/.env` | Ollama | `OLLAMA_API_KEY` |
+| `runtime/floci/.env` | Floci | `AWS_ENDPOINT_URL`, `AWS_DEFAULT_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` |
 
-```bash
-./scripts/generate-env-examples.sh
-```
-
-### Step 4: Start the service
-
-```bash
-docker compose -f services/<service>/docker-compose.yml up -d
-```
-
-### Step 5: Add NPM proxy host (if web-accessible)
-
-1. Open NPM admin at `https://npm.giografi.my.id`
-2. Add Proxy Host: domain = `<service>.giografi.my.id`, forward to `<container_name>:<container_port>`
-3. Enable SSL + Force SSL
-4. Add DNS A record in Cloudflare
+**Rules:**
+1. Never commit `.env` files. Run `./scripts/generate-env-examples.sh` to sync templates for git.
+2. Don't put quotes around simple values — Docker reads them literally.
+3. Special characters like `;` or `$` can break `env_file` parsing. See [Troubleshooting #4](#4-env-file-quotes-breaking-parsing).
+4. Variables can reference other variables on the same file.
 
 ### Resource limit guidelines
 
@@ -454,343 +424,13 @@ docker compose -f services/<service>/docker-compose.yml up -d
 | Heavy app (databases, monitoring) | 0.5-1 | 512M-2G | Depends on data volume |
 | AI/ML (Ollama) | Depends | Depends | Cloud = light, Local = heavy |
 
-**Rule of thumb:** Start low. If a container keeps getting OOM-killed (`docker inspect <name> | grep OOMKilled`), increase memory by 256M increments.
+Start low. If a container gets OOM-killed (`docker inspect <name> | grep OOMKilled`), increase memory by 256M increments.
 
 ---
 
-## 9. Environment Files
+## Reference
 
-| File | Service | Keys (descriptions) |
-|------|---------|-------------------|
-| `runtime/open-webui/.env` | Open WebUI | `OPENAI_API_KEY` (OpenAI), `OPENROUTER_API_KEY` (OpenRouter), `HF_TOKEN` (HuggingFace), `ANTHROPIC_API_KEY` (Anthropic), `DEEPSEEK_API_KEY` (DeepSeek), `WEBUI_SECRET_KEY` (session secret), `WEBUI_ADMIN_EMAIL`, `WEBUI_ADMIN_PASSWORD` |
-| `runtime/ollama/.env` | Ollama | `OLLAMA_API_KEY` (cloud model auth) |
-| `runtime/floci/.env` | Floci | `AWS_ENDPOINT_URL`, `AWS_DEFAULT_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (test credentials) |
-
-**Important rules for .env files:**
-
-1. **Never commit .env files to git.** The `.gitignore` excludes `runtime/**` but includes `**/.env.example`. Run `./scripts/generate-env-examples.sh` to sync templates.
-2. **Don't put quotes around simple values.** Docker reads them literally. `"value"` becomes `"value"` (with quotes).
-3. **Special characters need care.** If your password has `;` or `$`, it can break env_file parsing. See [Troubleshooting #5](#5-hftoken-double-quotes-breaking-env-parsing).
-4. **Variables can reference other variables.** In the Open WebUI .env, `OPENAI_API_BASE_URLS=$OPENAI_BASEURL;$OPENROUTER_BASEURL` works because Docker resolves them in order.
-
-**Keeping .env.example in sync:**
-
-Every `.env` has a corresponding `.env.example` with placeholder values. After editing any `.env`, run:
-
-```bash
-./scripts/generate-env-examples.sh
-```
-
-This ensures GitHub always has the latest template with the correct keys.
-
----
-
-## 10. Troubleshooting
-
-These are all the issues I hit while setting up this homelab, in the order I encountered them.
-
----
-
-### 1. AdGuardHome admin panel unreachable
-
-**Symptom:** I go to `http://YOUR.IP:8080` and get "connection refused".
-
-**Root cause:** I commented out the `8080:80` port mapping in the compose file. This is intentional.
-
-**What I tried:**
-- Uncommented the port → it worked but conflicted with drawio
-- Decided to keep it commented out and access via NPM only
-
-**Fix:** Access AdGuardHome admin through NPM at `https://adguard.giografi.my.id`. Make sure you have an NPM proxy host configured for it (forward to `adguardhome:80`).
-
-**Prevention:** If you need to temporarily access the admin panel directly, uncomment the port, do your work, then comment it out again.
-
----
-
-### 2. AdGuardHome install wizard vs runtime ports
-
-**Symptom:** After installing AdGuardHome, the admin panel at port 8080 doesn't load. But port 3000 works.
-
-**Root cause:** AdGuardHome uses port 3000 for the first-launch setup wizard. After setup completes, it switches to port 80. The container maps both:
-- `3000:3000` → only active during first launch
-- `8080:80` → only active after setup completes (and currently commented out)
-
-**What I tried:**
-- Accessing port 8080 immediately after starting the container → failed
-- Accessing port 3000 → showed the setup wizard
-- Completed setup, then port 80 started working
-
-**Fix:** Complete the AdGuardHome setup wizard at `http://YOUR.IP:3000` first. After that, the admin panel runs on port 80 (accessible via NPM).
-
-**Prevention:** Always complete the setup wizard before trying to access via NPM.
-
----
-
-### 3. NPM 502 Bad Gateway
-
-**Symptom:** I set up an NPM proxy host for Open WebUI, but when I visit `https://ai.giografi.my.id`, I get "502 Bad Gateway".
-
-**Root cause:** I entered the wrong forward port. I put the *host-mapped* port (8080) instead of the *container* port (also 8080 in this case, but for other services the ports differ).
-
-**The key concept:** NPM forwards to `container_name:CONTAINER_PORT`, not `container_name:HOST_PORT`. These are often different.
-
-**What I tried:**
-- Checked container was running: `docker ps` → yes
-- Checked NPM logs: `docker logs npm` → saw "upstream connection error"
-- Verified the container port: `docker inspect open-webui | grep -A5 Ports` → internal port is 8080
-- Fixed the forward port in NPM from `8080` to `8080` (same in this case, but I had it wrong for another service)
-
-**Fix:** In NPM admin, edit the proxy host. Set Forward Host to the container name (e.g., `open-webui`) and Forward Port to the container's internal port (check `docker inspect <container>` under "Ports").
-
-**Prevention:** Always verify the container port with `docker inspect` before setting up NPM. Don't guess.
-
----
-
-### 4. Open WebUI "Missing Authentication header"
-
-**Symptom:** Open WebUI loads, but when I try to use it, I get "Missing Authentication header" or "Failed to connect to AI provider".
-
-**Root cause:** I used the wrong environment variable name. I had `OPEN_API_KEYS` instead of `OPENAI_API_KEYS`.
-
-**What I tried:**
-- Checked the `.env` file → values looked correct
-- Checked the compose file → saw `OPEN_API_KEYS` (missing the `AI` part)
-- Fixed it to `OPENAI_API_KEYS`
-- Restarted the container → still broken
-- Realized the old env var had written bad config to the SQLite database
-
-**Fix:** 
-1. Fix the env var name in the compose file
-2. If the DB is corrupted, you need to either:
-   - Delete `runtime/open-webui/data/webui.db` and re-setup Open WebUI
-   - Or manually fix the DB with SQLite commands (what I did — risky, backup first)
-
-**Prevention:** Always double-check env var names against the official docs. Open WebUI's vars start with `OPENAI_`, not `OPEN_`.
-
----
-
-### 5. HF_TOKEN double quotes breaking env parsing
-
-**Symptom:** Open WebUI starts but can't connect to HuggingFace. The `.env` file has `HF_TOKEN="hf_abc123..."` but the container reads it as `"hf_abc123..."` (with the quotes included).
-
-**Root cause:** Docker's `env_file` directive reads values literally. If you put quotes around a value, the quotes become part of the value. Worse, if the value contains `;` (semicolons), it can break the parsing of subsequent variables on the same line.
-
-In my case, I had:
-```
-OPENAI_API_KEYS=$OPENAI_APIKEY;$OPENROUTER_APIKEY;$ANTHROPIC_APIKEY;$HF_TOKEN;$DEEPSEEK_APIKEY
-```
-
-The `HF_TOKEN` had quotes around it, which broke the semicolon-separated list.
-
-**What I tried:**
-- Removed quotes from all `.env` values
-- Tested each provider individually
-- Found that removing quotes from `HF_TOKEN` fixed the chain
-
-**Fix:** Remove all quotes from `.env` values unless the value itself contains spaces (and even then, be careful). If a value contains special characters like `;`, `$`, or `#`, consider using a different variable structure.
-
-**Prevention:** Don't put quotes around values in `.env` files. Docker reads them literally.
-
----
-
-### 6. Open WebUI DB corruption from env var issues
-
-**Symptom:** After fixing the env var names, Open WebUI still couldn't connect to providers. The settings in the UI showed wrong base URLs.
-
-**Root cause:** Open WebUI stores API config in `runtime/open-webui/data/webui.db` (SQLite). When I had wrong env vars, the app wrote bad config to the DB. Even after fixing the env vars, the DB still had the old (wrong) values.
-
-**What I tried:**
-1. Restarted the container → didn't help (DB persisted)
-2. Deleted `webui.db` → fresh setup, worked but lost all chats
-3. Decided to manually fix the DB instead (what I did)
-
-**Fix:**
-```bash
-# Backup the DB first
-cp runtime/open-webui/data/webui.db runtime/open-webui/data/webui.db.bak
-
-# Install sqlite3
-sudo apt install sqlite3
-
-# Inspect the config
-sqlite3 runtime/open-webui/data/webui.db "SELECT * FROM config WHERE key LIKE 'api%';"
-
-# Update the bad values
-sqlite3 runtime/open-webui/data/webui.db "UPDATE config SET value = 'correct_url' WHERE key = 'api_base_url';"
-
-# Restart the container
-docker compose -f services/open-webui/docker-compose.yml restart
-```
-
-**Prevention:** Get the env vars right the first time. If you mess up, delete `webui.db` before the container has a chance to write bad config. It's faster than fixing it manually.
-
----
-
-### 7. Ollama cloud models need authentication
-
-**Symptom:** I can use local Ollama models (like `llama3`) but cloud models (like `gemma4:31b-cloud`) return "unauthorized".
-
-**Root cause:** Ollama cloud models require an API key. You need to log in inside the container.
-
-**What I tried:**
-- Setting `OLLAMA_API_KEY` in `.env` → didn't work (that's for something else)
-- Running `ollama login` inside the container → worked
-
-**Fix:**
-```bash
-# Enter the container
-docker exec -it ollama sh
-
-# Log in to Ollama cloud
-ollama login
-# Paste your API key when prompted
-
-# Exit
-exit
-
-# Test
-curl http://localhost:11434/api/tags
-# Should show cloud models available
-```
-
-**Prevention:** After logging in, the auth token is stored in the container. If you recreate the container (`docker compose down && up`), you'll need to log in again. Consider mounting the Ollama auth directory as a volume.
-
----
-
-### 8. Drawio port 8080 conflict with AdGuardHome
-
-**Symptom:** I start both AdGuardHome and drawio, but one of them can't bind to port 8080.
-
-**Root cause:** Both services were trying to map host port 8080 to their container ports. Docker can't bind the same host port to two different containers.
-
-**What I tried:**
-- Changed drawio's host port to 8081 → worked but now I need to remember which port is which
-- Decided to remove drawio's host ports entirely → access via NPM only
-
-**Fix:** Drawio's compose file has no `ports` section. It's only accessible through NPM at `https://drawio.giografi.my.id` (forward to `drawio:8080`).
-
-**Prevention:** Before exposing a host port, check if anything else already uses it: `ss -tlnp | grep :8080`
-
----
-
-### 9. Traefik vs NPM port conflict
-
-**Symptom:** I start Traefik and NPM, but one of them fails because they both want port 80 or 443.
-
-**Root cause:** Both are reverse proxies. If they both bind to port 80/443, only one can run.
-
-**What I tried:**
-- Running Traefik on alt ports `8080`/`8443` → worked
-- Decided to keep both running: NPM on 80/443 (production), Traefik on 8080/8443 (learning)
-
-**Fix:** Traefik's compose file uses:
-```yaml
-ports:
-  - "8080:80"   # HTTP on alt port
-  - "8443:443"  # HTTPS on alt port
-```
-
-NPM keeps the standard ports:
-```yaml
-ports:
-  - "80:80"
-  - "443:443"
-  - "81:81"
-```
-
-**Prevention:** Check port availability before starting a new reverse proxy: `ss -tlnp | grep -E ':(80|443|8080|8443) '`
-
----
-
-### 10. Container not connecting to private-net
-
-**Symptom:** Container starts but can't reach other services by name. `docker exec -it <container> ping npm` fails.
-
-**Root cause:** I forgot to add the `networks` section to the compose file, or I forgot the top-level `networks:` declaration.
-
-**The fix:** Every compose file needs BOTH:
-
-```yaml
-# Inside the service definition:
-services:
-  my-service:
-    networks:
-      - private-net
-
-# At the bottom of the file:
-networks:
-  private-net:
-    external: true
-```
-
-Without the bottom section, Docker creates a *new* network called `private-net` just for that compose file, separate from the shared one.
-
-**What I tried:**
-- `docker network ls` → saw two `private-net` networks
-- `docker network inspect private-net` → only some containers were listed
-- Added the `external: true` declaration → container joined the correct network
-
-**Prevention:** Always include both `networks:` sections. The `external: true` tells Docker "don't create this network, it already exists."
-
----
-
-## 11. FAQ
-
-### Q: Why single Docker network instead of separate ones?
-
-**A:** I'm a beginner. A single `private-net` is simpler to manage, debug, and reason about. I can split it later (e.g., `monitoring-net`, `ai-net`, `proxy-net`) when I outgrow it. For now, `docker network inspect private-net` shows everything in one place.
-
-### Q: Why NPM instead of just Traefik?
-
-**A:** NPM has a web UI for managing proxy hosts. I can add domains, SSL certs, and advanced configs without editing YAML files. Traefik is great for automation (it auto-discovers containers), but I want to learn the manual way first. I run both — NPM on standard ports for production, Traefik on alt ports for learning.
-
-### Q: Why cloud-only Ollama?
-
-**A:** I don't have a GPU. Running LLMs locally on CPU would be painfully slow. Ollama supports cloud models (like `gemma4:31b-cloud`) that run on Ollama's servers but are accessed through the same API. This way I get the Ollama experience without the hardware requirements.
-
-### Q: Why bind mounts instead of Docker volumes?
-
-**A:** I can see, edit, and back up the data directly. `ls /home/giografi/homelab/runtime/npm/data/` shows me exactly what NPM is storing. Docker volumes require `docker volume inspect` and are stored in `/var/lib/docker/volumes/` which is harder to manage.
-
-### Q: Why comment out AdGuardHome admin port?
-
-**A:** Security. I want all admin access to go through HTTPS (NPM) with SSL. Direct HTTP access on port 8080 has no encryption and no authentication. If I need to temporarily access it, I uncomment the port, do my work, then comment it out again.
-
-### Q: Why does Open WebUI have both multi-provider and single-provider env vars?
-
-**A:** Open WebUI supports multiple AI providers via `OPENAI_API_BASE_URLS` and `OPENAI_API_KEYS` (semicolon-separated lists). But it also supports single-provider fallback via `OPENAI_API_BASE_URL` and `OPENAI_API_KEY`. I have both configured because:
-- The multi-provider vars had DB corruption issues (see Troubleshooting #6)
-- The single-provider vars work as a fallback
-- If I fix the multi-provider setup later, I can remove the single-provider vars
-
-### Q: How do I add a new AI provider to Open WebUI?
-
-**A:** Add the provider's base URL and API key to the `.env` file, then append them to the semicolon-separated lists:
-
-```bash
-# In runtime/open-webui/.env
-NEW_PROVIDER_BASEURL=https://api.newprovider.com/v1
-NEW_PROVIDER_APIKEY=sk-your-key-here
-
-# Update the lists
-OPENAI_API_BASE_URLS=$OPENAI_BASEURL;$OPENROUTER_BASEURL;$ANTHROPIC_BASEURL;$HF_BASEURL;$DEEPSEEK_BASEURL;$NEW_PROVIDER_BASEURL
-OPENAI_API_KEYS=$OPENAI_APIKEY;$OPENROUTER_APIKEY;$ANTHROPIC_APIKEY;$HF_TOKEN;$DEEPSEEK_APIKEY;$NEW_PROVIDER_APIKEY
-```
-
-Restart the container: `docker compose -f services/open-webui/docker-compose.yml restart`
-
-### Q: How do I add a new subdomain?
-
-**A:**
-1. Add DNS A record in Cloudflare: `<subdomain>` → `YOUR.SERVER.IP`
-2. Start the service: `docker compose -f services/<service>/docker-compose.yml up -d`
-3. In NPM admin, add Proxy Host: `<subdomain>.giografi.my.id` → `<container_name>:<port>`
-4. Enable SSL + Force SSL
-5. Test: `https://<subdomain>.giografi.my.id`
-
----
-
-## 12. Port Reference
+### Port Reference
 
 | Port | Protocol | Service | Exposed to Host? | Purpose |
 |------|----------|---------|-----------------|---------|
@@ -814,11 +454,9 @@ Restart the container: `docker compose -f services/open-webui/docker-compose.yml
 | 11434 | TCP | Ollama | Yes | LLM API |
 | 3100 | TCP | Loki | No | Log aggregation (not started) |
 
----
+### Compose Template
 
-## 13. Compose Template
-
-I follow this exact field order for every compose file. Copy this and fill in the blanks:
+Copy and fill in the blanks:
 
 ```yaml
 services:
@@ -867,38 +505,130 @@ networks:
     external: true
 ```
 
-**Field order explained:**
+**Field order rationale:**
 
-1. `container_name` — predictable name for `docker exec` and NPM
-2. `image` — what to pull from Docker Hub
-3. `restart` — `unless-stopped` = auto-restart on crash/reboot, but not if you manually stop it
-4. `env_file` — path to `.env` with secrets
-5. `environment` — non-sensitive env vars (can be in compose directly)
-6. `ports` — host-to-container port mapping
-7. `volumes` — bind mounts for persistent data
-8. `healthcheck` — how Docker knows if the service is actually working
-9. `depends_on` — start order (Docker starts dependencies first)
-10. `networks` — which Docker network to join
-11. `deploy.resources` — CPU and RAM limits (prevents one service from hogging everything)
-12. Top-level `networks:` — declares the external network
+| # | Field | Why |
+|---|-------|-----|
+| 1 | `container_name` | Predictable name for `docker exec` and NPM |
+| 2 | `image` | What to pull from Docker Hub |
+| 3 | `restart` | `unless-stopped` = auto-restart on crash/reboot, but not if manually stopped |
+| 4 | `env_file` | Path to `.env` with secrets |
+| 5 | `environment` | Non-sensitive vars (safe in compose) |
+| 6 | `ports` | Host-to-container port mapping |
+| 7 | `volumes` | Bind mounts for persistent data |
+| 8 | `healthcheck` | How Docker knows the service is actually working |
+| 9 | `depends_on` | Start order |
+| 10 | `networks` | Which Docker network to join |
+| 11 | `deploy.resources` | CPU and RAM limits |
+| 12 | Top-level `networks:` | Declares the external network (critical — without `external: true`, Docker creates a new isolated network) |
 
-**Quick reference — start commands:**
+---
+
+## Troubleshooting
+
+### 1. AdGuardHome admin panel unreachable via direct IP
+
+**Symptom:** `http://YOUR.IP:8080` returns "connection refused".
+
+**Cause:** The `8080:80` port mapping is intentionally commented out.
+
+**Fix:** Access through NPM at `https://adguard.giografi.my.id`. If you need direct access temporarily, uncomment the port, do your work, then comment it out again.
+
+---
+
+### 2. AdGuardHome setup wizard vs admin panel
+
+**Symptom:** Port 8080 doesn't load after starting AdGuardHome, but port 3000 works.
+
+**Cause:** AdGuardHome uses port 3000 for the first-launch setup wizard. After setup completes, it switches to port 80.
+
+**Fix:** Complete the setup wizard at `http://YOUR.IP:3000` first. Then the admin panel runs on port 80 (accessible via NPM).
+
+---
+
+### 3. NPM 502 Bad Gateway
+
+**Symptom:** Proxy host returns "502 Bad Gateway".
+
+**Cause:** Wrong forward port — used the host-mapped port instead of the container port.
+
+**Fix:** In NPM, set Forward Host to the container name and Forward Port to the container's internal port. Verify with `docker inspect <container>` under "Ports".
+
+---
+
+### 4. .env file quotes breaking parsing
+
+**Symptom:** Service starts but can't connect to providers. `.env` values have quotes like `HF_TOKEN="hf_abc..."` but the container reads them literally with quotes included.
+
+**Cause:** Docker's `env_file` reads values literally. Quotes become part of the value. Worse, quotes around a value in a semicolon-separated list (like `$HF_TOKEN` in `OPENAI_API_KEYS`) break the entire chain.
+
+**Fix:** Remove all quotes from `.env` values unless the value itself contains spaces.
+
+---
+
+### 5. Open WebUI "Missing Authentication header"
+
+**Symptom:** Open WebUI loads but can't connect to AI providers. "Missing Authentication header" errors.
+
+**Cause:** Wrong environment variable name (e.g., `OPEN_API_KEYS` instead of `OPENAI_API_KEYS`).
+
+**Fix:** Double-check env var names against the official Open WebUI docs. If the DB already stored bad config, either delete `runtime/open-webui/data/webui.db` and re-setup, or manually fix it with SQLite:
 
 ```bash
-# Start
-docker compose -f services/<service>/docker-compose.yml up -d
+cp runtime/open-webui/data/webui.db runtime/open-webui/data/webui.db.bak
+sqlite3 runtime/open-webui/data/webui.db "SELECT * FROM config WHERE key LIKE 'api%';"
+sqlite3 runtime/open-webui/data/webui.db "UPDATE config SET value = 'correct_url' WHERE key = 'api_base_url';"
+docker compose -f services/open-webui/docker-compose.yml restart
+```
 
-# Stop
-docker compose -f services/<service>/docker-compose.yml down
+---
 
-# Restart
-docker compose -f services/<service>/docker-compose.yml restart
+### 6. Ollama cloud models need authentication
 
-# Logs
-docker compose -f services/<service>/docker-compose.yml logs -f
+**Symptom:** Local Ollama models (like `llama3`) work, but cloud models (like `gemma4:31b-cloud`) return "unauthorized".
 
-# Status
-docker ps --format "table {{.Names}}\t{{.Status}}"
+**Cause:** Cloud models require an API key via `ollama login`.
+
+**Fix:**
+
+```bash
+docker exec -it ollama sh
+ollama login          # paste your API key
+exit
+curl http://localhost:11434/api/tags   # verify cloud models appear
+```
+
+**Note:** Auth is stored in the container. Re-creating the container requires logging in again.
+
+---
+
+### 7. Port 8080 conflict between services
+
+**Symptom:** One of two services (e.g., AdGuardHome and Drawio) fails to start — can't bind to port 8080.
+
+**Cause:** Both services try to map host port 8080.
+
+**Fix:** Remove port mappings from one service and access it through NPM. Check existing port usage with: `ss -tlnp | grep :8080`
+
+---
+
+### 8. Container not connecting to private-net
+
+**Symptom:** Container starts but can't reach other services by name. `docker exec -it <container> ping npm` fails.
+
+**Cause:** Missing the top-level `networks:` declaration with `external: true` in the compose file. Without it, Docker creates a new isolated network with the same name.
+
+**Fix:** Every compose file needs:
+
+```yaml
+# Inside the service:
+networks:
+  - private-net
+
+# At the bottom of the file:
+networks:
+  private-net:
+    external: true
 ```
 
 ---
