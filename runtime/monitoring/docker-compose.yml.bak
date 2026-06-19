@@ -1,0 +1,88 @@
+networks:
+  airflow:
+    driver: bridge
+    external: true
+
+services:
+  loki:
+    image: grafana/loki:3.6.3
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - airflow
+
+  promtail:
+    image: grafana/promtail:3.2.1
+    volumes:
+      - /var/log:/var/log
+      - ./config/promtail.yml:/etc/promtail/c`onfig.yml
+    command: -config.file=/etc/promtail/config.yml
+    networks: 
+      - airflow
+
+  prometheus:
+    image: prom/prometheus:v2.49.0
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-storage:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    networks:
+      - airflow
+
+  # statsd-exporter:
+  #   image: prom/statsd-exporter:v0.28.0
+  #   volumes:
+  #     - ./config/statsd.yml:/home/statsd-mapping-configs.yaml
+  #   command:
+  #     - "--log.level=debug"
+  #     - "--statsd.mapping-config=/home/statsd-mapping-configs.yaml"
+  #   ports:
+  #     - "9102:9102"
+  #     - "9125:9125/udp"
+  #   restart: always
+  #   networks:
+  #     - airflow
+
+  grafana:
+    image: grafana/grafana:12.4.0-20082909961
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    environment:
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_FEATURE_TOGGLES_ENABLE=alertingSimplifiedRouting,alertingQueryAndExpressionsStepMode
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        mkdir -p /etc/grafana/provisioning/datasources
+        cat <<EOF > /etc/grafana/provisioning/datasources/ds.yaml
+        apiVersion: 1
+        datasources:
+          - name: Loki
+            type: loki
+            access: proxy
+            orgId: 1
+            url: http://loki:3100
+            isDefault: true
+            editable: false
+        EOF
+        /run.sh
+    networks:
+      - airflow
+
+volumes:
+  grafana-storage:
+  prometheus-storage:
+
