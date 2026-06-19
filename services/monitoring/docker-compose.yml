@@ -117,7 +117,7 @@ services:
     restart: unless-stopped
 
     ports:
-      - "3000:3000"
+      - "3030:3000"
 
     environment:
       GF_PATHS_PROVISIONING: /etc/grafana/provisioning
