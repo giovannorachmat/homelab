@@ -47,11 +47,11 @@ This is not a beefy server. Every service has strict resource limits. If you add
 | **NPM** | `jc21/nginx-proxy-manager:2.15.1` | 80, 81, 443 | 0.5 / 250M | Reverse proxy + SSL | Running |
 | **Ollama** | `ollama/ollama:latest` | 11434 | 0.5 / 256M | LLM inference (cloud proxy) | Running |
 | **Open WebUI** | `ghcr.io/open-webui/open-webui:main-slim` | (internal only) | 1 / 1G | Chat interface for LLMs | Running |
-| **Traefik** | `traefik:latest` | 8080, 8443 | 0.25 / 128M | Reverse proxy (learning) | Running |
+| **Traefik** | `traefik:latest` | 9080, 9443 | 0.25 / 128M | Reverse proxy (learning) | Running |
 | **n8n** | `docker.n8n.io/n8nio/n8n` | 5678 | 1 / 1G | Workflow automation | Not started |
 | **Drawio** | `jgraph/drawio` | (none) | 0.5 / 256M | Diagramming tool | Not started |
 | **Floci** | `floci/floci:latest` | 4566 | 0.5 / 256M | Local AWS emulator | Not started |
-| **Monitoring** | Multiple | 3000, 9090, 9091, 9100, 3100 | ~2.5G total | Grafana + Prometheus + Loki | Not started |
+| **Monitoring** | Multiple | 3030, 9090, 9091, 9100, 3100 | ~2.5G total | Grafana + Prometheus + Loki | Not started |
 
 **Total resources if everything runs:** ~6.5 GB RAM, ~5.5 CPU cores. On a 16GB / 8-thread machine, this leaves headroom for the OS and bursts.
 
@@ -226,13 +226,13 @@ All containers share a single Docker bridge network called `private-net`. This l
 
 #### Port mapping
 
-When you see `ports: "8080:80"` in a compose file:
+When you see `ports: "9080:80"` in a compose file:
 
 ```
 host_port : container_port
 ```
 
-- `8080` = port on the host machine (what you access from outside)
+- `9080` = port on the host machine (what you access from outside)
 - `80` = port inside the container (what the app listens on)
 
 **Common mistake:** NPM forwards to the **container port**, not the host port.
@@ -258,10 +258,10 @@ Drawio's container listens on port 8080 internally, same as AdGuardHome's commen
 
 #### Traefik vs NPM
 
-I run both reverse proxies. NPM on standard ports (80/443) for production. Traefik on alt ports (8080/8443) for learning. Check port availability before starting a new proxy:
+I run both reverse proxies. NPM on standard ports (80/443) for production. Traefik on alt ports (9080/9443) for learning. Check port availability before starting a new proxy:
 
 ```bash
-ss -tlnp | grep -E ':(80|443|8080|8443) '
+ss -tlnp | grep -E ':(80|443|9080|9443) '
 ```
 
 ### Why a single Docker network?
@@ -440,14 +440,14 @@ Start low. If a container gets OOM-killed (`docker inspect <name> | grep OOMKill
 | 81 | TCP | NPM | Yes | NPM admin panel |
 | 443 | TCP | NPM | Yes | HTTPS |
 | 3000 | TCP | AdGuardHome | No | First-launch wizard only |
-| 3000 | TCP | Grafana | No | Monitoring (not started) |
+| 3030 | TCP | Grafana | No | Monitoring (not started) |
 | 4566 | TCP | Floci | No | Local AWS (not started) |
 | 5678 | TCP | n8n | No | Workflow automation (not started) |
-| 8080 | TCP | Traefik | Yes | Traefik HTTP (alt port) |
+| 9080 | TCP | Traefik | Yes | Traefik HTTP (alt port) |
 | 8080 | TCP | AdGuardHome | No | Admin panel (commented out) |
 | 8080 | TCP | Open WebUI | No | Internal only |
 | 8080 | TCP | Drawio | No | Internal only |
-| 8443 | TCP | Traefik | Yes | Traefik HTTPS (alt port) |
+| 9443 | TCP | Traefik | Yes | Traefik HTTPS (alt port) |
 | 9090 | TCP | Prometheus | No | Metrics (not started) |
 | 9091 | TCP | Promtail | No | Log shipping (not started) |
 | 9100 | TCP | Node Exporter | No | System metrics (not started) |
@@ -602,13 +602,15 @@ curl http://localhost:11434/api/tags   # verify cloud models appear
 
 ---
 
-### 7. Port 8080 conflict between services
+### 7. Port conflict between services
 
-**Symptom:** One of two services (e.g., AdGuardHome and Drawio) fails to start — can't bind to port 8080.
+**Symptom:** One of two services fails to start — can't bind to a port.
 
-**Cause:** Both services try to map host port 8080.
+**Cause:** Both services try to map the same host port (e.g., port 9080).
 
-**Fix:** Remove port mappings from one service and access it through NPM. Check existing port usage with: `ss -tlnp | grep :8080`
+**Fix:** Remove port mappings from one service and access it through NPM. Check existing port usage with: `ss -tlnp | grep :<port>`
+
+**Note:** Port 8080 is reserved for AdGuardHome (admin panel, currently commented out). Port 3000 is reserved for AdGuardHome's first-launch setup wizard. Traefik and Grafana use 9080/9443 and 3030 respectively to avoid conflicts.
 
 ---
 
