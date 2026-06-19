@@ -1,8 +1,12 @@
-# Ignore everything in runtime/ (secrets, data, certs)
-runtime/**
+# Ignore secrets
+**/.env
 
-# Except .env.example templates (needed for GitHub)
-!**/.env.example
+# Ignore runtime data (large/private)
+runtime/**/data/
+runtime/**/conf/
+runtime/**/work/
+runtime/**/letsencrypt/
+runtime/certs/
 
 # Docker
 .docker/
