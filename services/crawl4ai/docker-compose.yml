@@ -1,0 +1,64 @@
+services:
+  crawl4ai:
+    container_name: crawl4ai
+    image: unclecode/crawl4ai:latest
+    restart: unless-stopped
+
+    env_file:
+      - ../../runtime/crawl4ai/.env
+
+    volumes:
+      - ../../runtime/crawl4ai/data:/app/data
+
+    networks:
+      - private-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2G
+        reservations:
+          cpus: "1"
+          memory: 2G
+
+  crawl4ai-proxy:
+    container_name: crawl4ai-proxy
+    build: ./proxy
+    restart: unless-stopped
+
+    env_file:
+      - ../../runtime/crawl4ai/.env
+
+    environment:
+      AVOID_ADS: true
+      CACHE_ENABLED: true
+      CACHE_TTL_SECONDS: 300
+      CONTENT_FILTER_TYPE: "pruning"
+      CRAWL4AI_ENDPOINT: "http://crawl4ai:11235/crawl"
+      CRAWL_TIMEOUT_SECONDS: 120
+      FLATTEN_SHADOW_DOM: true
+      INCLUDE_REFERENCES: true
+      LISTEN_PORT: 8000
+      LOG_FORMAT: "json"
+      MAX_PAGES_BEFORE_RECYCLE: 100
+      MEMORY_SAVING_MODE: true
+      PRUNING_THRESHOLD: 0.35
+      RATE_LIMIT_RPS: 10
+      REMOVE_CONSENT_POPUPS: true
+
+    networks:
+      - private-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 1G
+
+networks:
+  private-net:
+    external: true
