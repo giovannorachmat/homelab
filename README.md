@@ -3,8 +3,8 @@
 This is a personal homelab running on a mini PC at home. I use it to learn Docker, networking, reverse proxies, monitoring, and everything else a good DevOps engineer should know (though at the time of this writing, I'm not a DevOps engineer). Everything runs on a single machine behind a Cloudflare DNS, accessible from anywhere via subdomains on `giografi.my.id`.
 
 **Current status:**
-- 5 services running (AdGuardHome, NPM, Ollama, Open WebUI, Traefik)
-- 4 services defined but not started (n8n, drawio, floci, monitoring)
+- 8 services running (AdGuardHome, NPM, Ollama, Open WebUI, Traefik, crawl4ai, 9router, tika)
+- 5 services defined but not started (n8n, drawio, floci, monitoring)
 - All behind NPM reverse proxy with Let's Encrypt SSL
 
 ---
@@ -51,9 +51,12 @@ This is not a beefy server. Every service has strict resource limits. If you add
 | **n8n** | `docker.n8n.io/n8nio/n8n` | 5678 | 1 / 1G | Workflow automation | Not started |
 | **Drawio** | `jgraph/drawio` | (none) | 0.5 / 256M | Diagramming tool | Not started |
 | **Floci** | `floci/floci:latest` | 4566 | 0.5 / 256M | Local AWS emulator | Not started |
+| **Tika** | `apache/tika:latest` | 9998 | 1 / 2G | Content extraction framework | Running |
 | **Monitoring** | Multiple | 3030, 9090, 9091, 9100, 3100 | ~2.5G total | Grafana + Prometheus + Loki | Not started |
+| **9router** | Build from local source | 20128 | 1 / 1G | API routing & proxy | Running |
+| **crawl4ai** | `unclecode/crawl4ai:latest` + proxy | (internal only) | 1.5 / 3G | Web crawling & content extraction | Running |
 
-**Total resources if everything runs:** ~6.5 GB RAM, ~5.5 CPU cores. On a 16GB / 8-thread machine, this leaves headroom for the OS and bursts.
+**Total resources if everything runs:** ~13 GB RAM, ~9 CPU cores. On a 16GB / 8-thread machine, the machine is at capacity — not everything can run simultaneously.
 
 ---
 
@@ -62,11 +65,17 @@ This is not a beefy server. Every service has strict resource limits. If you add
 ```
 /home/giografi/homelab/
 ├── services/                  # Docker Compose files + configs (what to run)
+│   ├── 9router/
+│   │   └── docker-compose.yml
 │   ├── adguardhome/
+│   │   └── docker-compose.yml
+│   ├── crawl4ai/
 │   │   └── docker-compose.yml
 │   ├── drawio/
 │   │   └── docker-compose.yml
 │   ├── floci/
+│   │   └── docker-compose.yml
+│   ├── tika/
 │   │   └── docker-compose.yml
 │   ├── monitoring/
 │   │   ├── config/            # Prometheus, Grafana, Promtail configs
@@ -83,13 +92,21 @@ This is not a beefy server. Every service has strict resource limits. If you add
 │       └── docker-compose.yml
 │
 └── runtime/                   # Persistent data for containers (what to keep)
+    ├── 9router/
+    │   ├── .env               # JWT secret, API keys, cloud sync config
+    │   └── data/
     ├── adguardhome/
     │   ├── conf/              # AdGuardHome config (AdGuardHome.yaml)
     │   └── work/              # AdGuardHome runtime data
     ├── certs/                 # TLS certificates (Tailscale, home.lan wildcard)
+    ├── crawl4ai/
+    │   ├── .env               # API token
+    │   └── data/
     ├── floci/
     │   ├── data/
     │   └── .env               # AWS credentials (test)
+    ├── tika/
+    │   └── data/
     ├── monitoring/
     │   ├── config/
     │   └── .env
@@ -305,9 +322,12 @@ docker compose -f services/open-webui/docker-compose.yml up -d
 docker compose -f services/traefik/docker-compose.yml up -d
 
 # Optional services
+docker compose -f services/9router/docker-compose.yml up -d
 docker compose -f services/n8n/docker-compose.yml up -d
+docker compose -f services/crawl4ai/docker-compose.yml up -d
 docker compose -f services/drawio/docker-compose.yml up -d
 docker compose -f services/floci/docker-compose.yml up -d
+docker compose -f services/tika/docker-compose.yml up -d
 docker compose -f services/monitoring/docker-compose.yml up -d
 ```
 
@@ -408,6 +428,8 @@ Restart: `docker compose -f services/open-webui/docker-compose.yml restart`
 | `runtime/open-webui/.env` | Open WebUI | `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `HF_TOKEN`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `WEBUI_SECRET_KEY`, `WEBUI_ADMIN_EMAIL`, `WEBUI_ADMIN_PASSWORD` |
 | `runtime/ollama/.env` | Ollama | `OLLAMA_API_KEY` |
 | `runtime/floci/.env` | Floci | `AWS_ENDPOINT_URL`, `AWS_DEFAULT_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` |
+| `runtime/crawl4ai/.env` | crawl4ai | `CRAWL4AI_API_TOKEN` |
+| `runtime/9router/.env` | 9router | `JWT_SECRET`, `INITIAL_PASSWORD`, `DATA_DIR`, `PORT`, `NODE_ENV`, `API_KEY_SECRET`, `BASE_URL`, `CLOUD_URL` |
 
 **Rules:**
 1. Never commit `.env` files. Run `./scripts/generate-env-examples.sh` to sync templates for git.
@@ -443,11 +465,13 @@ Start low. If a container gets OOM-killed (`docker inspect <name> | grep OOMKill
 | 3030 | TCP | Grafana | No | Monitoring (not started) |
 | 4566 | TCP | Floci | No | Local AWS (not started) |
 | 5678 | TCP | n8n | No | Workflow automation (not started) |
+| 20128 | TCP | 9router | Yes | API routing |
 | 9080 | TCP | Traefik | Yes | Traefik HTTP (alt port) |
 | 8080 | TCP | AdGuardHome | No | Admin panel (commented out) |
 | 8080 | TCP | Open WebUI | No | Internal only |
 | 8080 | TCP | Drawio | No | Internal only |
 | 9443 | TCP | Traefik | Yes | Traefik HTTPS (alt port) |
+| 9998 | TCP | Tika | Yes | Content extraction (not started) |
 | 9090 | TCP | Prometheus | No | Metrics (not started) |
 | 9091 | TCP | Promtail | No | Log shipping (not started) |
 | 9100 | TCP | Node Exporter | No | System metrics (not started) |
