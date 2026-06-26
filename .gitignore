@@ -1,5 +1,6 @@
 # Ignore secrets
 **/.env
+.ruff_cache
 
 # Ignore runtime data (large/private)
 runtime/**/data/

@@ -1,0 +1,32 @@
+services:
+  9router:
+    container_name: 9router
+    build:
+      context: ../../../9router/
+      dockerfile: Dockerfile
+    restart: unless-stopped
+
+    env_file:
+      - ../../runtime/9router/.env
+
+    ports:
+      - "20128:20128"
+
+    volumes:
+      - ../../runtime/9router/data/:/var/lib/9router
+
+    networks:
+      - private-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+        reservations:
+          cpus: "1"
+          memory: 1G
+
+networks:
+  private-net:
+    external: true
