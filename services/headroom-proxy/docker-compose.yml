@@ -1,0 +1,30 @@
+services:
+  headroom:
+    container_name: headroom-proxy
+    image: ghcr.io/chopratejas/headroom:latest
+
+    env_file:
+      - ../../runtime/headroom-proxy/.env
+
+    environment:
+      HEADROOM_MODE: optimize
+      HEADROOM_LOG_LEVEL: INFO
+
+    ports:
+      - "8787:8787"
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 250M
+        reservations:
+          cpus: "0.5"
+          memory: 250M
+
+    networks:
+      - private-net
+
+networks:
+  private-net:
+    external: true
