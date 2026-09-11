@@ -1,0 +1,119 @@
+services:
+  authentik-postgres:
+    container_name: authentik-postgres
+    image: postgres:16-alpine
+    restart: unless-stopped
+
+    env_file:
+      - ../../runtime/authentik/.env
+
+    # POSTGRES_* variables are supplied via env_file
+
+    volumes:
+      - ../../runtime/authentik/postgres:/var/lib/postgresql/data
+
+    networks:
+      - private-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+
+  authentik-redis:
+    container_name: authentik-redis
+    image: redis:7-alpine
+    restart: unless-stopped
+
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+
+    networks:
+      - private-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
+
+  authentik-server:
+    container_name: authentik-server
+    image: ghcr.io/goauthentik/server:latest
+    command: server
+    restart: unless-stopped
+
+    env_file:
+      - ../../runtime/authentik/.env
+
+    environment:
+      AUTHENTIK_REDIS__HOST: authentik-redis
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgres
+
+    # ponytail: expose 9000 for initial bootstrap; safe to keep, or remove after Caddy is live
+    ports:
+      - "9000:9000/tcp"
+
+    volumes:
+      - ../../runtime/authentik/media:/media
+      - ../../runtime/authentik/certs:/certs
+
+    depends_on:
+      - authentik-postgres
+      - authentik-redis
+
+    networks:
+      - private-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1.5G
+        reservations:
+          cpus: "0.5"
+          memory: 1G
+
+  authentik-worker:
+    container_name: authentik-worker
+    image: ghcr.io/goauthentik/server:latest
+    restart: unless-stopped
+
+    command: ["worker"]
+
+    env_file:
+      - ../../runtime/authentik/.env
+
+    environment:
+      AUTHENTIK_REDIS__HOST: authentik-redis
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgres
+
+    volumes:
+      - ../../runtime/authentik/media:/media
+      - ../../runtime/authentik/certs:/certs
+
+    depends_on:
+      - authentik-postgres
+      - authentik-redis
+
+    networks:
+      - private-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 512M
+
+networks:
+  private-net:
+    external: true
