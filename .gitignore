@@ -14,6 +14,7 @@ runtime/paperless/consume/
 runtime/paperless/export/
 runtime/paperless/redis/
 runtime/ollama/models/
+runtime/nextcloud/html/
 
 # Docker
 .docker/
