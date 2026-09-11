@@ -1,0 +1,41 @@
+{
+  # Use Cloudflare DNS-01 for certificate management (wildcard certs)
+  # Requires CLOUDFLARE_API_TOKEN in the container env
+  acme_dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+}
+
+(authentik) {
+  # Authenticate every request via authentik's embedded outpost
+  forward_auth http://authentik-server:9000 {
+    uri /outpost.goauthentik.io/auth/caddy
+    copy_headers X-Authentik-Username X-Authentik-Groups X-Authentik-Email X-Authentik-Name X-Authentik-Uid X-Authentik-Jwt X-Authentik-Meta-Jwks X-Authentik-Meta-Outpost X-Authentik-Meta-Provider X-Authentik-Meta-App X-Authentik-Meta-Version
+  }
+}
+
+auth.giografi.my.id {
+  reverse_proxy authentik-server:9000
+}
+
+ai.giografi.my.id {
+  reverse_proxy open-webui:8080
+}
+
+drawio.giografi.my.id {
+  reverse_proxy drawio:8080
+}
+
+arcane.giografi.my.id {
+  reverse_proxy arcane:3552
+}
+
+syncthing.giografi.my.id {
+  reverse_proxy syncthing:8384
+}
+
+adguard.giografi.my.id {
+  reverse_proxy adguardhome:80
+}
+
+9router.giografi.my.id {
+  reverse_proxy 9router:20128
+}
