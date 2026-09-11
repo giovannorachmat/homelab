@@ -1,5 +1,5 @@
 networks:
-  private-net:
+  monitoring:
     external: true
 
 services:
@@ -17,7 +17,7 @@ services:
       - /:/rootfs:ro
 
     networks:
-      - private-net
+      - monitoring
 
     deploy:
       resources:
@@ -47,7 +47,7 @@ services:
       - "--web.console.templates=/usr/share/prometheus/consoles"
 
     networks:
-      - private-net
+      - monitoring
 
     depends_on:
       - node-exporter
@@ -72,7 +72,7 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
 
     networks:
-      - private-net
+      - monitoring
 
     deploy:
       resources:
@@ -100,7 +100,7 @@ services:
     command: -config.file=/etc/promtail/config.yml
 
     networks:
-      - private-net
+      - monitoring
 
     deploy:
       resources:
@@ -132,7 +132,7 @@ services:
       - ./config/grafana/linux-monitoring.json:/var/lib/grafana/dashboards/linux-monitoring.json
 
     networks:
-      - private-net
+      - monitoring
 
     depends_on:
       - prometheus
