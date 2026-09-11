@@ -160,9 +160,7 @@
         },
         "showUnfilled": true,
         "sizing": "auto",
-        "text": {
-
-        },
+        "text": {},
         "valueMode": "color"
       },
       "pluginVersion": "11.6.1",
@@ -1859,7 +1857,10 @@
                   {
                     "id": "custom.lineStyle",
                     "value": {
-                      "dash": [10, 10],
+                      "dash": [
+                        10,
+                        10
+                      ],
                       "fill": "dash"
                     }
                   },
@@ -4373,7 +4374,10 @@
                   {
                     "id": "custom.lineStyle",
                     "value": {
-                      "dash": [10, 10],
+                      "dash": [
+                        10,
+                        10
+                      ],
                       "fill": "dash"
                     }
                   },
@@ -5524,7 +5528,10 @@
                   {
                     "id": "custom.lineStyle",
                     "value": {
-                      "dash": [10, 10],
+                      "dash": [
+                        10,
+                        10
+                      ],
                       "fill": "dash"
                     }
                   },
@@ -7042,7 +7049,10 @@
                   {
                     "id": "custom.lineStyle",
                     "value": {
-                      "dash": [10, 10],
+                      "dash": [
+                        10,
+                        10
+                      ],
                       "fill": "dash"
                     }
                   }
@@ -7178,7 +7188,10 @@
                   {
                     "id": "custom.lineStyle",
                     "value": {
-                      "dash": [10, 10],
+                      "dash": [
+                        10,
+                        10
+                      ],
                       "fill": "dash"
                     }
                   }
@@ -7428,7 +7441,10 @@
                   {
                     "id": "custom.lineStyle",
                     "value": {
-                      "dash": [10, 10],
+                      "dash": [
+                        10,
+                        10
+                      ],
                       "fill": "dash"
                     }
                   },
@@ -7575,7 +7591,10 @@
                   {
                     "id": "custom.lineStyle",
                     "value": {
-                      "dash": [10, 10],
+                      "dash": [
+                        10,
+                        10
+                      ],
                       "fill": "dash"
                     }
                   },
@@ -7605,7 +7624,10 @@
                   {
                     "id": "custom.lineStyle",
                     "value": {
-                      "dash": [10, 10],
+                      "dash": [
+                        10,
+                        10
+                      ],
                       "fill": "dash"
                     }
                   },
@@ -7956,7 +7978,10 @@
                   {
                     "id": "custom.lineStyle",
                     "value": {
-                      "dash": [10, 10],
+                      "dash": [
+                        10,
+                        10
+                      ],
                       "fill": "dash"
                     }
                   },
@@ -10281,7 +10306,10 @@
                   {
                     "id": "custom.lineStyle",
                     "value": {
-                      "dash": [10, 10],
+                      "dash": [
+                        10,
+                        10
+                      ],
                       "fill": "dash"
                     }
                   },
@@ -11983,7 +12011,10 @@
                   {
                     "id": "custom.lineStyle",
                     "value": {
-                      "dash": [10, 10],
+                      "dash": [
+                        10,
+                        10
+                      ],
                       "fill": "dash"
                     }
                   }
@@ -14592,7 +14623,10 @@
                   {
                     "id": "custom.lineStyle",
                     "value": {
-                      "dash": [10, 10],
+                      "dash": [
+                        10,
+                        10
+                      ],
                       "fill": "dash"
                     }
                   }
@@ -15292,7 +15326,10 @@
                   {
                     "id": "custom.lineStyle",
                     "value": {
-                      "dash": [10, 10],
+                      "dash": [
+                        10,
+                        10
+                      ],
                       "fill": "dash"
                     }
                   },
@@ -15457,7 +15494,10 @@
                   {
                     "id": "custom.lineStyle",
                     "value": {
-                      "dash": [10, 10],
+                      "dash": [
+                        10,
+                        10
+                      ],
                       "fill": "dash"
                     }
                   }
@@ -15635,14 +15675,14 @@
   "refresh": "1m",
   "schemaVersion": 41,
   "tags": [
-    "linux"
+    "linux",
+    "monitoring",
+    "system"
   ],
   "templating": {
     "list": [
       {
-        "current": {
-
-        },
+        "current": {},
         "includeAll": false,
         "label": "Datasource",
         "name": "ds_prometheus",
@@ -15653,9 +15693,7 @@
         "type": "datasource"
       },
       {
-        "current": {
-
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "${ds_prometheus}"
@@ -15675,9 +15713,7 @@
         "type": "query"
       },
       {
-        "current": {
-
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "${ds_prometheus}"
@@ -15697,9 +15733,7 @@
         "type": "query"
       },
       {
-        "current": {
-
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "${ds_prometheus}"
@@ -15721,14 +15755,13 @@
     ]
   },
   "time": {
-    "from": "now-24h",
+    "from": "now-5m",
     "to": "now"
   },
-  "timepicker": {
-
-  },
+  "timepicker": {},
   "timezone": "browser",
-  "title": "Node Exporter Full",
+  "title": "MiniPC Monitoring",
+  "description": "Sys/proc monitoring of Lenovo M720q via Node Exporter and Prometheus",
   "uid": "rYdddlPWk",
   "version": 98,
   "weekStart": "",
