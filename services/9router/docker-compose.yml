@@ -1,9 +1,7 @@
 services:
   9router:
     container_name: 9router
-    build:
-      context: ../../../9router/
-      dockerfile: Dockerfile
+    image: decolua/9router:latest
     restart: unless-stopped
 
     env_file:
@@ -13,7 +11,7 @@ services:
       - "20128:20128"
 
     volumes:
-      - ../../runtime/9router/data/:/var/lib/9router
+      - ../../runtime/9router/data/:/app/data
 
     networks:
       - private-net
@@ -26,6 +24,29 @@ services:
         reservations:
           cpus: "0.75"
           memory: 500M
+
+  headroom:
+    container_name: headroom
+    image: ghcr.io/chopratejas/headroom:latest
+    restart: always
+
+    ports:
+      - "8787:8787"
+
+    volumes:
+      - ../../runtime/headroom/data:/app/data
+
+    networks:
+      - private-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
 
 networks:
   private-net:
