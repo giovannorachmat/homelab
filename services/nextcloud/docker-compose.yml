@@ -1,0 +1,43 @@
+services:
+  nextcloud:
+    container_name: nextcloud
+    image: nextcloud:latest
+    restart: unless-stopped
+
+    env_file:
+      - ../../runtime/nextcloud/.env
+
+    environment:
+      # SQLite keeps this to a single container; not recommended for production
+      # with >100 users or heavy load (use a separate mariadb/postgres service).
+      PHP_MEMORY_LIMIT: 512M
+      PHP_MAX_INPUT_VARS: 10000
+
+    ports:
+      - "8081:80"
+
+    volumes:
+      - ../../runtime/nextcloud/html:/var/www/html
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:80/status.php || exit 1"]
+      interval: 1m30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+    networks:
+      - private-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+networks:
+  private-net:
+    external: true
