@@ -1,6 +1,8 @@
 networks:
   monitoring:
     external: true
+  private-net:
+    external: true
 
 services:
   node-exporter:
@@ -133,6 +135,7 @@ services:
 
     networks:
       - monitoring
+      - private-net
 
     depends_on:
       - prometheus
