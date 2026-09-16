@@ -1,4 +1,6 @@
 networks:
+  monitoring:
+    external: true
   private-net:
     external: true
 
@@ -17,7 +19,7 @@ services:
       - /:/rootfs:ro
 
     networks:
-      - private-net
+      - monitoring
 
     deploy:
       resources:
@@ -47,7 +49,7 @@ services:
       - "--web.console.templates=/usr/share/prometheus/consoles"
 
     networks:
-      - private-net
+      - monitoring
 
     depends_on:
       - node-exporter
@@ -72,7 +74,7 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
 
     networks:
-      - private-net
+      - monitoring
 
     deploy:
       resources:
@@ -100,7 +102,7 @@ services:
     command: -config.file=/etc/promtail/config.yml
 
     networks:
-      - private-net
+      - monitoring
 
     deploy:
       resources:
@@ -119,10 +121,11 @@ services:
     ports:
       - "3030:3000"
 
+    env_file:
+      - ../../runtime/monitoring/.env
+
     environment:
       GF_PATHS_PROVISIONING: /etc/grafana/provisioning
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
       GF_FEATURE_TOGGLES_ENABLE: alertingSimplifiedRouting,alertingQueryAndExpressionsStepMode
 
     volumes:
@@ -132,6 +135,7 @@ services:
       - ./config/grafana/linux-monitoring.json:/var/lib/grafana/dashboards/linux-monitoring.json
 
     networks:
+      - monitoring
       - private-net
 
     depends_on:

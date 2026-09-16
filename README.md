@@ -34,6 +34,7 @@ Everything runs on a single machine behind a Cloudflare DNS, accessible from any
 | **Ollama**         | `ollama/ollama:latest`                                                | 11434                        | 6 / 12G          | Local LLM server (GGUFs) | Defined       |
 | **Open WebUI**     | `ghcr.io/open-webui/open-webui:main-slim`                             | internal only                | 2 / 4G           | Chat interface for LLMs  | ✅ Running    |
 | **Paperless**      | `ghcr.io/paperless-ngx/paperless-ngx` + valkey + gotenberg            | 8000                         | 1.75 / 2.6G      | Document management      | Defined       |
+| **Nextcloud**      | `nextcloud:latest`                                                      | 8081, nextcloud.giografi.my.id (via NPM) | 1 / 1G       | Cloud storage & file sync | ✅ Running   |
 | **Syncthing**      | `lscr.io/linuxserver/syncthing:latest`                                | 8384, 22000 TCP/UDP, 21027 UDP | 0.5 / 1G       | File synchronization     | ✅ Running    |
 | **Tika**           | `apache/tika:latest`                                                  | 9998                         | 1 / 2G           | Content extraction       | ✅ Running    |
 | **YTZero**         | `ghcr.io/pelski/ytzero:latest`                                        | 3001                         | 1 / 4G           | YouTube media downloader | ✅ Running    |
@@ -191,7 +192,7 @@ docker compose -f services/open-webui/docker-compose.yml restart
 
 **Fix:** Remove port mappings from one service and access it through NPM. Check existing port usage with: `ss -tlnp | grep :<port>`
 
-**Note:** Host port 8080 is currently used by AdGuardHome. Open WebUI and Drawio also listen on container port 8080 internally, so expose them through NPM or use different host ports.
+**Note:** Host ports 53, 80, 81, 443 are owned by NPM / AdGuardHome. Host port 8080 is used by Open Terminal and AdGuardHome container-internal; Open WebUI and Drawio also listen on container port 8080 internally, so expose them through NPM or use different host ports. Port 8081 maps to Nextcloud. Use `ss -tlnp | grep :<port>` before assigning any host port.
 
 ---
 
@@ -226,4 +227,4 @@ networks:
 
 ---
 
-_Last updated: 2026-08-29_
+_Last updated: 2026-09-08_
