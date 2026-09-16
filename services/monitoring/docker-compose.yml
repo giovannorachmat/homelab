@@ -126,16 +126,6 @@ services:
 
     environment:
       GF_PATHS_PROVISIONING: /etc/grafana/provisioning
-      GF_SERVER_ROOT_URL: https://grafana.giografi.my.id
-      GF_AUTH_GENERIC_OAUTH_ENABLED: "true"
-      GF_AUTH_GENERIC_OAUTH_NAME: Authentik
-      GF_AUTH_GENERIC_OAUTH_SCOPES: openid email profile
-      GF_AUTH_GENERIC_OAUTH_AUTH_URL: https://auth.giografi.my.id/application/o/authorize/
-      GF_AUTH_GENERIC_OAUTH_TOKEN_URL: http://authentik-server:9000/application/o/token/
-      GF_AUTH_GENERIC_OAUTH_API_URL: http://authentik-server:9000/application/o/userinfo/
-      GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP: "true"
-      GF_AUTH_GENERIC_OAUTH_USE_PKCE: "true"
-      GF_AUTH_GENERIC_OAUTH_ORG_ROLE: Admin
       GF_FEATURE_TOGGLES_ENABLE: alertingSimplifiedRouting,alertingQueryAndExpressionsStepMode
 
     volumes:
