@@ -7,10 +7,6 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:9090"]
 
-  - job_name: "statsd-exporter"
-    static_configs:
-      - targets: ["statsd-exporter:9102"]
-
   - job_name: "node-exporter"
     static_configs:
-      - targets: ["node-exporter-c:9100"]
+      - targets: ["monitoring-node-exporter:9100"]

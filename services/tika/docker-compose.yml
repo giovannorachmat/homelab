@@ -1,7 +1,7 @@
 services:
   tika:
     container_name: tika
-    image: apache/tika:latest
+    image: apache/tika:4.0.0
     restart: unless-stopped
 
     ports:
@@ -23,11 +23,11 @@ services:
     deploy:
       resources:
         limits:
+          cpus: "2"
+          memory: 4G
+        reservations:
           cpus: "1"
           memory: 2G
-        reservations:
-          cpus: "0.5"
-          memory: 512M
 
 networks:
   private-net:

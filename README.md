@@ -28,15 +28,15 @@ Everything runs on a single machine behind a Cloudflare DNS, accessible from any
 | **Floci**          | `floci/floci:latest`                                                  | 4566                         | 0.5 / 256M       | Local AWS emulator       | Defined       |
 | **Headroom Proxy** | `ghcr.io/chopratejas/headroom:latest`                                 | 8787                         | 0.5 / 250M       | Headroom optimizer proxy | Defined       |
 | **MCPO**           | `ghcr.io/open-webui/mcpo:main`                                        | internal only                | 0.5 / 250M       | MCP-to-OpenAPI proxy     | ✅ Running    |
-| **Monitoring**     | Prometheus, Loki, Promtail, Grafana, Node Exporter                    | 3030, 9090, 9091, 9100, 3100 | 2 / 2.5G         | Metrics + logs           | Defined       |
+| **Monitoring**     | Prometheus, Loki, Promtail, Grafana, Node Exporter                    | 3030, 9090, 9091, 9100, 3100 | 2 / 3G           | Metrics + logs (state in `monitoring_*` named volumes — never `down -v`) | ✅ Running    |
 | **NPM**            | `jc21/nginx-proxy-manager:2.15.1`                                     | 80, 81, 443                  | 0.5 / 250M       | Reverse proxy + SSL      | ✅ Running    |
 | **Open Terminal**  | `ghcr.io/open-webui/open-terminal:latest`                             | 8000                         | 2 / 4G           | Browser terminal backend | ✅ Running    |
-| **Ollama**         | `ollama/ollama:latest`                                                | 11434                        | 6 / 12G          | Local LLM server (GGUFs) | Defined       |
-| **Open WebUI**     | `ghcr.io/open-webui/open-webui:main-slim`                             | internal only                | 2 / 4G           | Chat interface for LLMs  | ✅ Running    |
+| **Ollama**         | `ollama/ollama:latest`                                                | 11434                        | 4 / 8G           | Local LLM server (GGUFs); `OLLAMA_KEEP_ALIVE=-1` keeps the RAG embedding model resident | Running       |
+| **Open WebUI**     | `ghcr.io/open-webui/open-webui:latest`                                | internal only                | 2 / 4G           | Chat interface for LLMs  | ✅ Running    |
 | **Paperless**      | `ghcr.io/paperless-ngx/paperless-ngx` + valkey + gotenberg            | 8000                         | 1.75 / 2.6G      | Document management      | Defined       |
 | **Nextcloud**      | `nextcloud:latest`                                                      | 8081, nextcloud.giografi.my.id (via NPM) | 1 / 1G       | Cloud storage & file sync | ✅ Running   |
 | **Syncthing**      | `lscr.io/linuxserver/syncthing:latest`                                | 8384, 22000 TCP/UDP, 21027 UDP | 0.5 / 1G       | File synchronization     | ✅ Running    |
-| **Tika**           | `apache/tika:latest`                                                  | 9998                         | 1 / 2G           | Content extraction       | ✅ Running    |
+| **Tika**           | `apache/tika:4.0.0` (pinned — see Troubleshooting #9)                 | 9998                         | 2 / 4G           | Content extraction       | ✅ Running    |
 | **YTZero**         | `ghcr.io/pelski/ytzero:latest`                                        | 3001                         | 1 / 4G           | YouTube media downloader | ✅ Running    |
 
 > **Note:** Syncthing is the exception to the `runtime/` data convention — its data lives at the absolute host path `/home/giografi/syncthing` (mounted as `/data` inside the container). Folder paths in the Syncthing GUI must be container paths (`/data/<name>`), not host paths.
@@ -227,4 +227,24 @@ networks:
 
 ---
 
-_Last updated: 2026-09-08_
+### 9. Open WebUI PDF uploads fail after a Tika re-pull
+
+**Symptom:** Uploading a PDF to Workspace/Knowledge fails instantly; `docker logs open-webui` shows `Error processing file` with `JSONDecodeError: Expecting value: line 2 column 1 (char 1)` from `retrieval.process_file`. Tika itself is up and `/version` answers.
+
+**Cause:** `apache/tika:latest` floated 3.3.1 → 4.0.0 on a re-pull (2026-09-18 incident). Open WebUI's Tika integration still had `rag.tika_server_version = "3"`, so it PUTs to `/tika/text` and parses the response as JSON — Tika 4 still answers `200` there but with **plain text**, hence the JSON error. The v4 API uses `PUT /tika/json/text` with a `tk:content` key.
+
+**Fix:** Admin Panel → Settings → Documents → **Tika Server Version = 4** (DB key `rag.tika_server_version`). The image is now pinned to `apache/tika:4.0.0` — if you ever bump it back to 3.x, flip the setting back to 3. Verify: `docker exec open-webui python -c "import requests;print(requests.put('http://tika:9998/tika/json/text', data=open('<some.pdf>','rb').read(), headers={'Content-Type':'application/pdf'}).status_code)"` → 200.
+
+---
+
+### 10. Host hard-resets (looked like "uploads kill the box")
+
+**Symptom:** Lenovo M715q powers off with no shutdown sequence; journal ends abruptly, `dockerd` later logs `Error decoding log file ... '\x00'`. Came back only via power button.
+
+**Cause (as of 2026-09-19):** NOT load, RAM, or Docker resources — there were no OOM/thermal/MCE kernel messages, memory peaked ~27%, and a 65 s all-core burn plus a cold 2.5 GB AVX2 model load both ran fine. Four resets were uncorrelated with activity (one mid model-pull, one while idle after 10 h uptime). Suspect the 65 W DC brick / barrel jack (known M7x0q cold-solder failure).
+
+**Forensics in place:** `loadwatch.service` logs loadavg + free memory every second to `/var/log/loadwatch.log` (syncs every 5 s), and journald flushes every second (`/etc/systemd/journald.conf.d/flush-fast.conf`). After any future cut, the last second before death is in those two sources: `sudo tail -60 /var/log/loadwatch.log` and `journalctl -b -1 | tail`.
+
+---
+
+_Last updated: 2026-09-19_
