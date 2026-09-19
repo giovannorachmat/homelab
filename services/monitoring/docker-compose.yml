@@ -6,7 +6,7 @@ networks:
 
 services:
   node-exporter:
-    container_name: node-exporter-c
+    container_name: monitoring-node-exporter
     image: prom/node-exporter:latest
     restart: unless-stopped
 
@@ -31,7 +31,7 @@ services:
           memory: 128M
 
   prometheus:
-    container_name: prometheus-c
+    container_name: monitoring-prometheus
     image: prom/prometheus:v2.49.0
     restart: unless-stopped
 
@@ -64,12 +64,16 @@ services:
           memory: 512M
 
   loki:
-    container_name: loki-c
+    container_name: monitoring-loki
     image: grafana/loki:3.6.3
     restart: unless-stopped
 
     ports:
       - "3100:3100"
+
+    volumes:
+      - loki-storage:/loki/data
+      - ../../runtime/monitoring/config/loki-config.yaml:/etc/loki/local-config.yaml:ro
 
     command: -config.file=/etc/loki/local-config.yaml
 
@@ -86,7 +90,7 @@ services:
           memory: 256M
 
   promtail:
-    container_name: promtail-c
+    container_name: monitoring-promtail
     image: grafana/promtail:3.2.1
     restart: unless-stopped
 
@@ -96,8 +100,6 @@ services:
     volumes:
       - /var/log:/var/log
       - ../../runtime/monitoring/config/promtail.yml:/etc/promtail/config.yml
-      - ../../runtime/airflow-docker/logs:/var/log/airflow:ro
-      - ../../runtime/vault/logs:/var/log/vault:ro
 
     command: -config.file=/etc/promtail/config.yml
 
@@ -114,7 +116,7 @@ services:
           memory: 128M
 
   grafana:
-    container_name: grafana-c
+    container_name: monitoring-grafana
     image: grafana/grafana:latest
     restart: unless-stopped
 
@@ -145,11 +147,12 @@ services:
       resources:
         limits:
           cpus: "0.5"
-          memory: 512M
+          memory: 1G
         reservations:
           cpus: "0.25"
-          memory: 256M
+          memory: 512M
 
 volumes:
   grafana-storage:
   prometheus-storage:
+  loki-storage:
