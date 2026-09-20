@@ -27,8 +27,13 @@ services:
 
   headroom:
     container_name: headroom
-    image: ghcr.io/chopratejas/headroom:latest
+    image: ghcr.io/headroomlabs-ai/headroom:0.37.0
     restart: always
+
+    environment:
+      # ponytail: ONNX sizes its thread pool from host cores (8) and spin-waits inside the 0.5-CPU cgroup (upstream #2885/#1326); cap to 1 until upstream reads the cpuset
+      ORT_INTRA_OP_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
 
     ports:
       - "8787:8787"
@@ -43,7 +48,7 @@ services:
       resources:
         limits:
           cpus: "0.5"
-          memory: 512M
+          memory: 1G
         reservations:
           cpus: "0.25"
           memory: 256M
