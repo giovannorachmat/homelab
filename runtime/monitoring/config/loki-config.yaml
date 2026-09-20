@@ -1,4 +1,4 @@
-# Based on the grafana/loki:3.6.3 stock local-config.yaml, with persistence
+# Based on the grafana/loki:3.7.8 stock local-config.yaml, with persistence
 # (path_prefix -> /loki/data, backed by the loki-storage named volume) and
 # 30-day retention added. Regenerate from the image if the major version bumps.
 auth_enabled: false
