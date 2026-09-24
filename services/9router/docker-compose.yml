@@ -34,6 +34,10 @@ services:
       # ponytail: ONNX sizes its thread pool from host cores (8) and spin-waits inside the 0.5-CPU cgroup (upstream #2885/#1326); cap to 1 until upstream reads the cpuset
       ORT_INTRA_OP_NUM_THREADS: "1"
       OMP_NUM_THREADS: "1"
+      # 9router calls POST /v1/compress from a bridge IP; that endpoint answers non-loopback callers with 404 unless this is set (upstream docs)
+      HEADROOM_COMPRESS_ALLOW_REMOTE: "1"
+      # Kompress ML path never completes in this box (partial HF cache); the structural compressors are what tool-output traffic needs anyway
+      HEADROOM_DISABLE_KOMPRESS: "1"
 
     ports:
       - "8787:8787"
