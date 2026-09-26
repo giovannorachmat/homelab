@@ -16,6 +16,7 @@ services:
       - ../../runtime/paperless/media:/usr/src/paperless/media
       - ../../runtime/paperless/export:/usr/src/paperless/export
       - ../../runtime/paperless/consume:/usr/src/paperless/consume
+      - ./scripts/ocr_rescue.py:/scripts/ocr_rescue.py:ro
 
     env_file:
       - ../../runtime/paperless/.env
@@ -27,6 +28,7 @@ services:
       PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://paperless-gotenberg:3000
       PAPERLESS_TIKA_ENDPOINT: http://tika:9998
       PAPERLESS_AI_ENABLED: "yes"
+      PAPERLESS_POST_CONSUME_SCRIPT: /scripts/ocr_rescue.py
 
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000 || exit 1"]

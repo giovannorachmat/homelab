@@ -1,0 +1,31 @@
+services:
+  ocr-loader:
+    build: .
+    container_name: ocr-loader
+    restart: unless-stopped
+
+    env_file:
+      - ../../runtime/ocr-loader/.env
+
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:9000/healthz', timeout=5)\" || exit 1"]
+      interval: 1m30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+    networks:
+      - private-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+
+networks:
+  private-net:
+    external: true

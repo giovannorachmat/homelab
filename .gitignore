@@ -15,6 +15,8 @@ runtime/paperless/export/
 runtime/paperless/redis/
 runtime/ollama/models/
 runtime/nextcloud/html/
+runtime/rackpeek/rackpeek-config/
+runtime/rackpeek/tmp/
 
 # Docker
 .docker/
